@@ -10,12 +10,13 @@ typedef struct FreeNode {
 } FreeNode;
 
 static char heap[CAPACITY] = {0};
+static char heap_metadata[CAPACITY] = {0};
 
 static FreeNode *freelist = NULL;
 static bool empty = false;
 
 static void init_freelist() {
-    freelist = (FreeNode*) heap;
+    freelist = (FreeNode*) heap_metadata;
     freelist -> next = NULL;
     freelist -> size = CAPACITY;
 }
@@ -46,8 +47,6 @@ void* talloc(size_t size) {
     if (size < sizeof(FreeNode))
         size = sizeof(FreeNode);
 
-    size += sizeof(size_t);
-
     size += ((sizeof(FreeNode) - (size % sizeof(FreeNode))) % sizeof(FreeNode));
 
     if (!empty && !freelist)
@@ -69,7 +68,7 @@ void* talloc(size_t size) {
 
     *(size_t*)current = size;
 
-    return (void*) ((char*) current + sizeof(size_t));
+    return (void*) heap + ((char*) current - heap_metadata);
 }
 
 static void merge_blocks(FreeNode* previous, FreeNode* block, FreeNode* next) {
@@ -94,13 +93,13 @@ void tfree(void* ptr) {
     if (!ptr)
         return;
 
+    void* ptrInFreeList = ((char*) ptr - heap) + heap_metadata;
+
     empty = false;
-    
-    void* blockStart = (void*) ((char*) ptr - sizeof(size_t));
 
-    size_t size = *(size_t*)blockStart;
+    size_t size = *(size_t*)ptrInFreeList;
 
-    FreeNode* block = (FreeNode*) blockStart;
+    FreeNode* block = (FreeNode*) ptrInFreeList;
     block -> size = size;
     
     FreeNode* current = freelist;
@@ -117,4 +116,13 @@ void tfree(void* ptr) {
         previous -> next = block;
 
     merge_blocks(previous, block, current);
+}
+
+static void view_heap() {
+    printf("Heap state:\n");
+    FreeNode* current = freelist;
+    while (current) {
+        printf("Free block at: %p, Size: %zu bytes\n", (void*)current, current->size);
+        current = current->next;
+    }
 }
